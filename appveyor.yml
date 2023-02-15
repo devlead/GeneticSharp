@@ -4,18 +4,18 @@ configuration: Release
 environment:
   clone_folder: c:\gs
   GITHUB_REPO_TOKEN:
-    secure: Jmpeow5aAcDhUHkwac/AC6MzQciGc9TLgrp5oz4U0gyAwCWGqqxJhmjz3AVrWp/V	
+    secure: Jmpeow5aAcDhUHkwac/AC6MzQciGc9TLgrp5oz4U0gyAwCWGqqxJhmjz3AVrWp/V
 assembly_info:
   patch: true
   file: '**\AssemblyInfo.*'
   assembly_version: '{version}'
   assembly_file_version: '{version}'
   assembly_informational_version: '{version}'
-  
+
 install:
 - ps: ./install-gtksharp.ps1
-- cmd: dotnet tool install --global Cake.Tool
-  
+- cmd: dotnet tool restore
+
 before_build:
 - cmd: dotnet --version
 - cmd: setJavaVersionForSonar.cmd

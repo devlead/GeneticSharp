@@ -1,28 +1,40 @@
 #tool "nuget:?package=MSBuild.SonarQube.Runner.Tool&version=4.8.0"
 #addin "nuget:?package=Cake.Sonar&version=1.1.31"
-#addin "nuget:?package=Cake.Git&version=2.0.0"
+#addin nuget:?package=Cake.Git&version=3.0.0
+
+public record BuildData(
+    string SonarLogin,
+    DirectoryPath SolutionDir,
+    string Branch
+)
+{
+    public bool ShouldRunSonar { get; } = !string.IsNullOrEmpty(SonarLogin);
+}
+
+Setup(
+    context => new BuildData(
+        EnvironmentVariable("GeneticSharp_SonarQube_login"),
+        MakeAbsolute(context.Directory("src")),
+        AppVeyor.Environment.Repository.Branch ?? GitBranchCurrent(".").FriendlyName
+    )
+);
 
 var target = Argument("target", "Default");
-var solutionDir = "src";
-var sonarLogin = EnvironmentVariable("GeneticSharp_SonarQube_login");
-var branch = EnvironmentVariable("APPVEYOR_REPO_BRANCH") ?? GitBranchCurrent(".").FriendlyName;
 
-if (string.IsNullOrEmpty(sonarLogin))
-    throw new Exception("You should set an environment variable 'GeneticSharp_SonarQube_login' with the token generated at the page https://sonarcloud.io/account/security/.");
 
 Task("Build")
-    .Does(() =>
+    .Does<BuildData>((context, data) =>
 {
     var settings = new DotNetBuildSettings
     {
         Configuration = "Release",
     };
 
-    DotNetBuild(solutionDir, settings);
+    DotNetBuild(data.SolutionDir.FullPath, settings);
 });
 
 Task("Test")
-    .Does(() =>
+    .Does<BuildData>((context, data) =>
 {
     var settings = new DotNetTestSettings
     {
@@ -32,36 +44,39 @@ Task("Test")
         }
     };
 
-    DotNetTest(solutionDir, settings);
+    DotNetTest(data.SolutionDir.FullPath, settings);
 });
 
 Task("SonarBegin")
-    .Does(() => 
+    .WithCriteria<BuildData>(data => data.ShouldRunSonar, nameof(BuildData.ShouldRunSonar))
+    .Does<BuildData>((context, data) =>
 {
     SonarBegin(new SonarBeginSettings {
         Key = "GeneticSharp",
-        Branch = branch,
+        Branch = data.Branch,
         Organization = "giacomelli-github",
         Url = "https://sonarcloud.io",
         Exclusions = "GeneticSharp.Benchmarks/*.cs,**/*Test.cs,**/Samples/*.cs,GeneticSharp.Runner.GtkApp/MainWindow.cs,GeneticSharp.Runner.GtkApp/PropertyEditor.cs,**/*.xml,**/Program.cs,**/AssemblyInfo.cs",
         OpenCoverReportsPath = "**/*.opencover.xml",
-        Login = sonarLogin   
+        Login = data.SonarLogin
      });
 });
 
 Task("SonarEnd")
-  .Does(() => {
+.WithCriteria<BuildData>(data => data.ShouldRunSonar, nameof(BuildData.ShouldRunSonar))
+  .Does<BuildData>((context, data) =>
+{
      SonarEnd(new SonarEndSettings{
-        Login = sonarLogin
+        Login = data.SonarLogin
      });
-  });
+});
 
 Task("Default")
     .IsDependentOn("SonarBegin")
     .IsDependentOn("Build")
     .IsDependentOn("Test")
     .IsDependentOn("SonarEnd")
-	.Does(()=> { 
+	.Does(()=> {
 });
 
 RunTarget(target);
